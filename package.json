@@ -1,34 +1,21 @@
 {
-  "name": "node-js-getting-started",
+  "name": "inmemori-api",
+  "author": {
+    "name": "Samuel Belolo",
+    "email": "contact@samuelbelolo.com"
+  },
   "version": "0.3.0",
-  "description": "A sample Node.js app using Express 4",
   "engines": {
     "node": "12.x"
   },
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "node test.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "ejs": "^2.5.6",
     "express": "^4.15.2",
     "node-fetch": "^2.6.1",
     "path": "^0.12.7",
     "phantom": "^6.3.0"
-  },
-  "devDependencies": {
-    "got": "^11.3.0",
-    "tape": "^4.7.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/heroku/node-js-getting-started"
-  },
-  "keywords": [
-    "node",
-    "heroku",
-    "express"
-  ],
-  "license": "MIT"
+  }
 }
