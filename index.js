@@ -1,20 +1,24 @@
+/** IMPORT  **/
 const express = require("express");
-// const jsdom = require("jsdom");
-// const { JSDOM } = jsdom;
 const fetch = require("node-fetch");
 const PORT = process.env.PORT || 5000;
 const phantom = require("phantom");
 const path = require("path");
 
-
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Fetch the information page  with provided slug
+ * @param {string} slug - query slug
+ */
 
 const getPage = async (slug) => {
-  const url = `https://api.inmemori.com/pages/${slug}`;
+  const url = `https://api.inmemori.com/pages/${slug}`; // format utl
   return new Promise((resolve, reject) => {
     return fetch(url) // fetch page link
       .then((response) => {
         response.json().then((msg) => {
           if (msg.hasOwnProperty("err") || msg.length === 0) {
+            // if not okay
             reject({ error: true, message: "incorrect slug" });
           }
           resolve(msg);
@@ -22,8 +26,15 @@ const getPage = async (slug) => {
       });
   });
 };
+
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Getting the list of information related to the provided slug
+ * @param {string} slug - query slug
+ */
+
 const getList = async (slug) => {
-  const url = `https://api.inmemori.com/memories/list/${slug}?byCategory=true`;
+  const url = `https://api.inmemori.com/memories/list/${slug}?byCategory=true`; // format url
   return new Promise((resolve, reject) => {
     return fetch(url) // fetch list link
       .then((response) => {
@@ -33,25 +44,37 @@ const getList = async (slug) => {
       });
   });
 };
+
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * return the size of the inmemory book
+ * @param req - express req
+ * @param res - express res
+ */
 const getInfos = async (req, res) => {
   try {
-    const accurate = req.query.accurate === "true" ? true : false
+    const accurate = req.query.accurate === "true" ? true : false; // do we need to parse and format string messages ?
     const infos = {};
     await getPage(req.params.slug); // get page
-    const data = await getList(req.params.slug); // Get memories
+    const data = await getList(req.params.slug); // Get memories and ceremonies
 
-    const instance = await phantom.create();
-    const page = await instance.createPage();
-    await page.on("onResourceRequested", function (requestData) {
-      console.info("Requesting", requestData.url);
-    });
-    await page.open(`${req.protocol}://${req.get("host")}/test`);
-    infos.ceremonyNumber = await getContentNumber(data.ceremony, page, accurate);
-    infos.memoriesNumber = await getContentNumber(data.memory, page, accurate);
+    const instance = await phantom.create(); // start phantom instance
+    const page = await instance.createPage(); // create a page
+
+    await page.open(`${req.protocol}://${req.get("host")}/test`); // open testing page
+    infos.ceremonyNumber = await getContentNumber(
+      data.ceremony,
+      page, // getting number of ceremony
+      accurate
+    );
+    infos.memoriesNumber = await getContentNumber(data.memory, page, accurate); // getting number of memories
+
     const result = {};
-    result.slug = req.params.slug;
-    const infosTomes = getTomesInfos(infos);
+    result.slug = req.params.slug; // set response slug
 
+    const infosTomes = getTomesInfos(infos); // getting details of tome(s)
+
+    // logic to retrieve size of tome(s)
     if (infosTomes.length === 3) {
       result.size = "custom";
     } else if (infosTomes.length === 2) {
@@ -71,64 +94,103 @@ const getInfos = async (req, res) => {
         result.size = "l";
       }
     }
-    res.json(result);
+    res.json(result); // return result
   } catch (error) {
     res.json(error);
   }
 };
+
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * return number of pages (text + images)
+ * @param {array} array - array to analyze : memories of ceremonies
+ * @param page - phantomJS related
+ * @param {bool} accurate - do we need to parse messages
+ */
 const getContentNumber = async (array, page, accurate) => {
-  let i = 0;
+  let i = 0; // counter
   for (const element of array) {
+    // for every elem
     if (element.message != "") {
+      // if not empty
       if (accurate) {
+        // if parsing
         element.message = await cutSentence(page, element.message); // check if the message is not higher than normal pages
         i += element.message.length; // add numbers of pages for the text
       } else {
-        i++;
+        i++; // just adding elem // Not checking if to height isn't good
       }
     }
-    i += element.images.length;
+    i += element.images.length; // adding images
   }
   return i; // return count
 };
 
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Getting height of text in index.html
+ * With right font-family, font-size, max-height,...
+ * @param page - PhantomJS related
+ * @param text - text to retreive height
+ */
 const isTooLong = async (page, text) => {
   return await page.evaluate(function (str) {
-    const el = document.querySelector("p");
-    el.innerText = str;
-    return el.offsetHeight;
+    const el = document.querySelector("p"); // retrieve p
+    el.innerText = str; // insert text
+    return el.offsetHeight; // getting height
   }, text);
 };
 
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Recursive Dichotomie algo , testing height
+ * @param page - PhantomJS related
+ * @param {string} string - string to test
+ * @param {int} count - used because first page should not be higher that 493px (e.g others : 548px)
+ */
+
 const dichotoText = async (page, string, count) => {
-  const len = string.length;
-  let middle = Math.ceil(len / 2);
-  const ceil = count > 0 ? 548 : 493;
-  const result = await isTooLong(page, string);
-  // console.log(result);
+  const len = string.length; // getting length of text
+  let middle = Math.ceil(len / 2); // Getting middle pos
+  const ceil = count > 0 ? 548 : 493; // Height to test with
+  const result = await isTooLong(page, string); // function name pretty explicit
   if (result <= ceil) {
+    // if is not too long
     return string;
   } else if (result > ceil) {
-    let next = string.substring(0, middle);
+    // if to long
+    let next = string.substring(0, middle); // restart with smaller portion
     if (/^\S/.test(string.substring(middle))) {
       next = next.replace(/\s+\S*$/, ""); // not cuting inside a word
     }
-    return dichotoText(page, next, count);
+    return dichotoText(page, next, count); // restart :)
   }
 };
+
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Getting array of formated string
+ * @param page - Phantom JS related
+ * @param text - text to format
+ */
 
 const cutSentence = async (page, text) => {
   let res = []; // final array
   let count = 0;
   do {
-    const final = await dichotoText(page, text, count);
-    res.push(final);
-    text = text.replace(res[res.length - 1], ""); // remove text that fit
+    const final = await dichotoText(page, text, count); // retrive text
+    res.push(final); // push it up
+    text = text.replace(res[res.length - 1], ""); // remove text to otiginal str
     count++;
   } while (text !== ""); // while all text not shorted
-  return res;
+  return res; // return array of right text
 };
 
+/**
+ * @author Samuel Belolo <contact@samuelbelolo.com>
+ * Will return Tome(s) detail
+ * @param {object} infos - tomes obj
+ */
 const getTomesInfos = (infos) => {
   const array = [];
   let totalTome = 1;
@@ -201,7 +263,6 @@ const getTomesInfos = (infos) => {
   }
   return array;
 };
-
 
 express()
   .get("/test", (req, res) => {
