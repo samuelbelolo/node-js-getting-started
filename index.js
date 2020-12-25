@@ -14,7 +14,6 @@ express()
     res.json({ error: true, message: "need a slug" });
   })
   .get("/:slug", async (req, res) => {
-    req.setTimeout(2000000);
     try {
       const infos = {};
       await getPage(req.params.slug); // get page
@@ -26,30 +25,28 @@ express()
         console.info("Requesting", requestData.url);
       });
       await page.open(`${req.protocol}://${req.get("host")}/test`);
-
       infos.ceremonyNumber = await getContentNumber(data.ceremony, page);
       infos.memoriesNumber = await getContentNumber(data.memory, page);
-
       const result = {};
       result.slug = req.params.slug;
-      result.infos = getTomesInfos(infos);
+      const infosTomes = getTomesInfos(infos);
 
-      if (result.infos.length === 3) {
+      if (infosTomes.length === 3) {
         result.size = "custom";
-      } else if (result.infos.length === 2) {
-        if (result.infos[1].total <= 54) {
+      } else if (infosTomes.length === 2) {
+        if (infosTomes[1].total <= 54) {
           result.size = "ls";
-        } else if (result.infos[1].total <= 94) {
+        } else if (infosTomes[1].total <= 94) {
           result.size = "lm";
-        } else if (result.infos[1].total <= 188) {
+        } else if (infosTomes[1].total <= 188) {
           result.size = "ll";
         }
       } else {
-        if (result.infos[0].total <= 54) {
+        if (infosTomes[0].total <= 54) {
           result.size = "s";
-        } else if (result.infos[0].total <= 94) {
+        } else if (infosTomes[0].total <= 94) {
           result.size = "m";
-        } else if (result.infos[0].total <= 188) {
+        } else if (infosTomes[0].total <= 188) {
           result.size = "l";
         }
       }
@@ -97,47 +94,41 @@ const getContentNumber = async (array, page) => {
   }
   return i; // return count
 };
-const isTooLong = async (page, text, count) => {
-  return await page.evaluate(
-    function (str, count) {
-      const el = document.querySelector("p");
-      el.innerText = str;
-      return count > 0 ? el.offsetHeight > 548 : el.offsetHeight > 493;
-    },
-    text,
-    count
-  );
+
+const isTooLong = async (page, text) => {
+  return await page.evaluate(function (str) {
+    const el = document.querySelector("p");
+    el.innerText = str;
+    return el.offsetHeight;
+  }, text);
 };
-const extract = async (page, string, count) => {
-  const restart = await isTooLong(page, string, count);
-  if (!restart) {
+
+const dichotoText = async (page, string, count) => {
+  const len = string.length;
+  let middle = Math.ceil(len / 2);
+  const ceil = count > 0 ? 548 : 493;
+  const result = await isTooLong(page, string);
+  // console.log(result);
+  if (result <= ceil) {
     return string;
-  } else {
-    // let reduce = 5;
-    // if (string.length > 5000) {
-    //   reduce = 3000;
-    // } else if (string.length > 3000) {
-    //   reduce = 2000;
-    // } else if (string.length > 2500) {
-    // }
-    let reduce = string.length - 50;
-    let next = string.substr(0, reduce);
-    if (/^\S/.test(string.substr(reduce))) {
-      next = next.replace(/\s+\S*$/, "");
+  } else if (result > ceil) {
+    let next = string.substring(0, middle);
+    if (/^\S/.test(string.substring(middle))) {
+      next = next.replace(/\s+\S*$/, ""); // not cuting inside a word
     }
-    return extract(page, next, count);
+    return dichotoText(page, next, count);
   }
 };
 
 const cutSentence = async (page, text) => {
-  let res = [];
+  let res = []; // final array
   let count = 0;
   do {
-    const result = await extract(page, text, count);
-    res.push(result);
-    text = text.replace(res[res.length - 1], "");
+    const final = await dichotoText(page, text, count);
+    res.push(final);
+    text = text.replace(res[res.length - 1], ""); // remove text that fit
     count++;
-  } while (text !== "");
+  } while (text !== ""); // while all text not shorted
   return res;
 };
 
